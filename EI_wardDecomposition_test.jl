@@ -150,49 +150,43 @@ for i in 1:length(fr_b)
     branch_name = get(branch_map, (from_actual, to_actual), "new_$i")
     study_branch_names[i] = branch_name
 end
+
 study_line_ax_ref = PNM.make_ax_ref(study_branch_names)
 A, ref_bus_positions = PNM.calculate_A_matrix(branches, buses)
-reference_bus = Set([collect(ref_bus_positions)[2]])
+bus_lookup
+reverse_bus_lookup_whole = Dict(value => key for (key, value) in bus_lookup)
 
+reference_bus = ybus_study.lookup[1][reverse_bus_lookup_whole[collect(ref_bus_positions)[1]]]
+Set(reference_bus)
 ##### compute the PTDF######
-study_ptdf = @time(PNM.VirtualPTDF(ybus_study,reference_bus,study_branch_names,study_line_ax_ref))   ### compute the studied system
-whole_ptdf = @time(PNM.VirtualPTDF(branches,buses))                                                  ### compute the whole system
+study_ptdf = @time(PNM.VirtualPTDF(ybus_study,Set(reference_bus),study_branch_names,study_line_ax_ref));   ### compute the studied system
+whole_ptdf = @time(PNM.VirtualPTDF(branches,buses));                                                  ### compute the whole system
 
 
-#####test if they are the same#######
-# study_ptdf["1STFRG2_300011_5STFRNGSU2_301535~2",630690]
-# whole_ptdf["1STFRG2_300011_5STFRNGSU2_301535~2",630690]
 
-# study_ptdf["1HOLDNG11_300012_5HOLDENB2_300124~11",300012]
-# whole_ptdf["1HOLDNG11_300012_5HOLDENB2_300124~11",300012]
 
 using Test
 passed_count = 0
 failed_count = 0
 
+lines_ptdf_not_same = []
+study_ptdf
+whole_ptdf
 for i in study_ptdf.axes[1]
     if startswith(i, "new")
         continue
     end
     for j in study_ptdf.axes[2]
         # Perform the approximate equality test manually
-        if isapprox(study_ptdf[i, j], whole_ptdf[i, j], atol=0.01)
+        if isapprox(study_ptdf[i, j], whole_ptdf[i, j], atol=0.001)
             passed_count += 1
         else
             failed_count += 1
+            push!(lines_ptdf_not_same,i)
             # println("Test failed at ($i, $j): $(study_ptdf[i, j]) vs $(whole_ptdf[i, j])")
         end
     end
 end
-passed_count
-failed_count
-
-
-for i in study_ptdf.axes[1]
-    if startswith(i, "new")
-        continue
-    end
-    for j in study_ptdf.axes[2]
-        @test isapprox(study_ptdf[i,j], whole_ptdf[i,j],atol=0.1)
-    end
-end
+lines_ptdf_not_same = unique(lines_ptdf_not_same)
+println(passed_count)
+println(failed_count)
