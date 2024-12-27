@@ -50,7 +50,19 @@ function ward_decompose(
     boundary_buses = sort(unique(boundary_buses))                                         #boundary buses   
     external_buses = sort(setdiff(buses, union(internal_buses, boundary_buses)))          #external buses                 
 
+    # drop the resistance and make the ybus matrix singular    
+    # ybus = PNM.Ybus(sys);
+    # ybus_matrix = ybus.data;
+    ###############
+    # buses = PNM.get_buses(sys)
+    # bus_ax = PSY.get_number.(buses)
+    # axes = (bus_ax, bus_ax)
+    # bus_lookup = PNM.make_ax_ref(bus_ax)
+    # look_up = lookup_input
+    # fixed_admittances = collect(PSY.get_components(PSY.FixedAdmittance, sys))
+    # ybus_matrix = PNM._buildybus(branches, buses, fixed_admittances)
     ybus_matrix = ybus_matrix_input
+    # buses = PSY.get_bus_numbers(sys)
     #################
     
     ybus_matrix = map(x -> x != 0.0 ? -1/imag(1/x)*im : x, ybus_matrix);
@@ -113,7 +125,7 @@ function ward_decompose(
     branches = PNM.get_ac_branches(sys)
     buses = PNM.get_buses(sys)
     fixed_admittances = collect(PSY.get_components(PSY.FixedAdmittance, sys))
-    whole_ybus = PNM._buildybus(branches, buses, fixed_admittances)
+    whole_ybus = @time(PNM._buildybus(branches, buses, fixed_admittances))
 
     bus_ax = PSY.get_number.(buses)
     bus_lookup = PNM.make_ax_ref(bus_ax)
@@ -122,7 +134,7 @@ function ward_decompose(
     bus_ax = [PSY.get_number(bus) for bus in buses]
     # axes = (line_ax, bus_ax)
     subnetworks = find_subnetworks(whole_ybus, bus_ax)
-    intersection_sizes = Dict(key => length(intersect(subnetworks[key], internal_buses_set)) for key in keys(subnetworks))
+    intersection_sizes = Dict(key => length(intersect(subnetworks[key], internal_buses)) for key in keys(subnetworks))
     max_key = findmax(intersection_sizes)[2]
     studied_subnetwork_buses = collect(subnetworks[max_key])
 
@@ -135,14 +147,14 @@ function ward_decompose(
     external_buses = Vector()
     boundary_buses = Vector()
 
-    for b in branches
+    @time(for b in branches
         if !in(b.arc.from.number, internal_buses) && in(b.arc.to.number, internal_buses)
             push!(boundary_buses, b.arc.from.number)
         end
         if in(b.arc.from.number, internal_buses) && !in(b.arc.to.number, internal_buses)
             push!(boundary_buses, b.arc.to.number)
         end
-    end
+    end)
     boundary_buses = sort(unique(boundary_buses))                                         #boundary buses   
     external_buses = sort(setdiff(buses, union(internal_buses, boundary_buses)))          #external buses                 
     
@@ -167,7 +179,7 @@ function ward_decompose(
     y_bi = ybus_matrix[mapped_boundary_buses, mapped_internal_buses];
 
     # compute the equavilant boundary ybus
-    y_equ_boundary = y_bb - y_be * KLU.solve!(klu(y_ee), Matrix(y_eb));
+    y_equ_boundary = @time(y_bb - y_be * KLU.solve!(klu(y_ee), Matrix(y_eb)));
 
     # construct the ybus of study system
     # study_buses = sort(union(mapped_internal_buses, mapped_boundary_buses));
@@ -183,7 +195,9 @@ function ward_decompose(
 
     # construct ybus_study with y_equ_boundary, ybus_internal, y_ib, and y_bi
     ybus_study[boundary_indices, boundary_indices] .= y_equ_boundary;
-    ybus_study[internal_indices, internal_indices] .= y_ii;
+    @time(ybus_study[internal_indices, internal_indices] = y_ii);
+    # @time(internal_idx = internal_indices .+ 1)
+    # @time(ybus_study[internal_idx, internal_idx] = y_ii)
     ybus_study[internal_indices, boundary_indices] .= y_ib;
     ybus_study[boundary_indices, internal_indices] .= y_bi;
 
