@@ -192,14 +192,32 @@ function VirtualPTDF(
     BA = SparseArrays.sparse(A_J,A_I, BA_V)
 
     #compute M
-    M = SparseArrays.spzeros(Int8, size(ybus))
+    # M = SparseArrays.spzeros(Int8, size(ybus))
     positive_direction_mask = imag.(ybus) .> 0
     negative_direction_mask = imag.(ybus) .< 0
-    M[positive_direction_mask] .= 1
-    M[negative_direction_mask] .= -1
+    # @time(M[positive_direction_mask] .= 1)
+    # @time(M[negative_direction_mask] .= -1)
+
+
+    rows, cols = size(ybus)
+    pos_indices = findall(positive_direction_mask)
+    neg_indices = findall(negative_direction_mask)
+    pos_row_indices = getindex.(pos_indices, 1)
+    pos_col_indices = getindex.(pos_indices, 2)
+    neg_row_indices = getindex.(neg_indices, 1)
+    neg_col_indices = getindex.(neg_indices, 2)
+    pos_values = fill(1, length(pos_indices))
+    neg_values = fill(-1, length(neg_indices))
+    all_row_indices = vcat(pos_row_indices, neg_row_indices)
+    all_col_indices = vcat(pos_col_indices, neg_col_indices)
+    all_values = vcat(pos_values, neg_values)
+    M = SparseArrays.sparse(all_row_indices, all_col_indices, all_values, rows, cols, Int8)
+
+
     row_sums = sum(abs.(ybus), dims=2)
     isolated = row_sums .== 0
     M[LinearAlgebra.diagind(M)] .= .!isolated
+
     subnetworks = find_subnetworks(M, bus_ax)
 
     #compute ABA
